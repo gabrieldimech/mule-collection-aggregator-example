@@ -1,0 +1,44 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<mule xmlns:vm="http://www.mulesoft.org/schema/mule/vm" xmlns="http://www.mulesoft.org/schema/mule/core"
+	xmlns:doc="http://www.mulesoft.org/schema/mule/documentation"
+	xmlns:spring="http://www.springframework.org/schema/beans" version="EE-3.6.1"
+	xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+	xsi:schemaLocation="http://www.springframework.org/schema/beans http://www.springframework.org/schema/beans/spring-beans-current.xsd
+http://www.mulesoft.org/schema/mule/core http://www.mulesoft.org/schema/mule/core/current/mule.xsd
+http://www.mulesoft.org/schema/mule/vm http://www.mulesoft.org/schema/mule/vm/current/mule-vm.xsd">
+
+	<!-- the CorrelationIdSingleton generates a UUID that is used as the next 
+		correlation group ID -->
+	<spring:beans>
+		<spring:bean id="CorrelationIdSingleton" name="CorrelationIdSingleton"
+			class="org.example.aggregator.CorrelationIdSingleton" />
+	</spring:beans>
+
+	<flow name="mule-collection-aggregator-exampleFlow">
+		<vm:inbound-endpoint exchange-pattern="one-way"
+			doc:name="VM-in" path="in" />
+
+		<!-- set group size for aggregator (3 means that the aggregator will wait 
+			for 3 messages before sending these to the next processor as a collection) -->
+		<set-property propertyName="MULE_CORRELATION_GROUP_SIZE"
+			value="3" doc:name="Property" />
+
+		<!-- collection aggregator used to aggregate a number of messages and return 
+			a collection, the timeout allows the aggregator to release the current messages 
+			in a collection smaller than the group size specified above -->
+		<collection-aggregator timeout="3000"
+			failOnTimeout="false" doc:name="Collection Aggregator">
+			<expression-message-info-mapping
+				messageIdExpression="#[message.id]"
+				correlationIdExpression="#[app.registry.CorrelationIdSingleton.getCorrelationId()]"/>
+		</collection-aggregator>
+
+		<!-- after aggregating a number of messages we need to invoke the correlationIdSingleton 
+			to generate a new correlation group id -->
+		<expression-component doc:name="Expression"><![CDATA[#[app.registry.CorrelationIdSingleton.updateCorrelationId()]]]></expression-component>
+
+		<vm:outbound-endpoint exchange-pattern="one-way"
+			path="out" doc:name="VM-out" />
+	</flow>
+</mule>
